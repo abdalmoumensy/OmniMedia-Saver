@@ -1,0 +1,91 @@
+name: Build & Release (Windows EXE + Android APK)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows (Portable + Setup Installer)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies & generate icons
+        run: |
+          python -m pip install --upgrade pip
+          pip install customtkinter yt-dlp imageio-ffmpeg pyinstaller pillow
+          python generate_icons.py
+      - name: Build Portable EXE
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --icon=app_icon.ico --add-data "app_icon.ico;." --collect-all customtkinter --name "OmniMedia-Saver-Portable" omnimedia_saver.py
+      - name: Build Setup Installer EXE
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --icon=app_icon.ico --add-data "app_icon.ico;." --collect-all customtkinter --name "OmniMediaSaver" omnimedia_saver.py
+          iscc installer.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OmniMedia-Saver-Windows-Portable
+          path: dist/OmniMedia-Saver-Portable.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OmniMedia-Saver-Windows-Installer
+          path: dist_installer/OmniMedia-Saver-Setup.exe
+
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install system dependencies & generate icons
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential git zip unzip openjdk-17-jdk autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev automake
+          pip install --upgrade pip
+          pip install pillow buildozer==1.5.0 cython==0.29.36
+          python3 generate_icons.py
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+      - name: Build APK
+        run: |
+          buildozer android debug
+          cp bin/*.apk bin/OmniMedia-Saver-Android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OmniMedia-Saver-Android-APK
+          path: bin/OmniMedia-Saver-Android.apk
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.0.0
+          name: "OmniMedia Saver v2.0.0 (Windows Installer, Portable EXE & Android APK)"
+          body: |
+            ### Downloads / التحميل المباشر
+            - **Windows Installer (`OmniMedia-Saver-Setup.exe`)**: Standard Windows setup wizard. / نسخة تثبيت كاملة للكمبيوتر.
+            - **Windows Portable (`OmniMedia-Saver-Portable.exe`)**: Standalone single-file executable. / نسخة محمولة تعمل فوراً بدون تثبيت.
+            - **Android Mobile (`OmniMedia-Saver-Android.apk`)**: Installable APK for Android phones. / نسخة الهواتف لنظام أندرويد.
+          files: |
+            release_assets/OmniMedia-Saver-Windows-Portable/OmniMedia-Saver-Portable.exe
+            release_assets/OmniMedia-Saver-Windows-Installer/OmniMedia-Saver-Setup.exe
+            release_assets/OmniMedia-Saver-Android-APK/OmniMedia-Saver-Android.apk
