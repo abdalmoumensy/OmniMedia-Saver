@@ -8,7 +8,7 @@ version = 2.0.0
 icon.filename = %(source.dir)s/icon.png
 presplash.filename = %(source.dir)s/presplash.png
 presplash.color = #05060b
-requirements = python3,kivy==2.3.0,yt-dlp,certifi,urllib3,requests,charset-normalizer,idna
+requirements = python3,kivy==2.3.0,yt-dlp,certifi,urllib3,requests,charset-normalizer==2.1.1,idna
 orientation = portrait
 fullscreen = 0
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
@@ -18,7 +18,7 @@ android.ndk = 25b
 android.accept_sdk_license = True
 android.archs = arm64-v8a, armeabi-v7a
 android.allow_backup = True
-p4a.branch = master
+p4a.branch = v2024.01.21
 
 [buildozer]
 log_level = 2
