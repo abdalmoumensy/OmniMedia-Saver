@@ -29,7 +29,7 @@ except Exception:
 if platform not in ("android", "ios"):
     Window.size = (400, 780)
 APP_NAME = "OmniMedia Saver"
-APP_VERSION = "2.0.1"
+APP_VERSION = "2.0.2"
 
 BG_TOP = "#05060b"
 CARD = "#0e1018"
@@ -581,6 +581,25 @@ class MobileUI(BoxLayout):
         self.ring.sub_text = "SAVING"
         self.st_lbl.text = "Saving file..."
 
+    def _build_ydl_opts(self, stage_dir, fmt, player_clients):
+        return {
+            "format": fmt,
+            "outtmpl": os.path.join(stage_dir, "%(title).80s.%(ext)s"),
+            "noplaylist": True,
+            "cachedir": False,
+            "restrictfilenames": True,
+            "nocheckcertificate": False,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": player_clients,
+                }
+            },
+            "progress_hooks": [self._hook],
+            "logger": UILogger(self.log),
+            "noprogress": True,
+            "quiet": True,
+        }
+        
     def _worker(self, url):
         stage_dir = os.path.join(self.private_dir, "staging")
         os.makedirs(stage_dir, exist_ok=True)
@@ -593,23 +612,36 @@ class MobileUI(BoxLayout):
         try:
             import yt_dlp
 
-            opts = {
-                "format": QUALITIES[self.quality_key]["f"],
-                "outtmpl": os.path.join(stage_dir, "%(title).80s.%(ext)s"),
-                "noplaylist": True,
-                "cachedir": False,
-                "restrictfilenames": True,
-                "nocheckcertificate": False,
-                "progress_hooks": [self._hook],
-                "logger": UILogger(self.log),
-                "noprogress": True,
-                "quiet": True,
-            }
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                downloaded_path = ydl.prepare_filename(info)
+            primary_fmt = QUALITIES[self.quality_key]["f"]
+            attempts = [
+                (primary_fmt, ["android", "android_vr", "ios"]),
+                ("b/best[ext=mp4]/best/bestaudio", ["android_vr", "tv_embedded", "android"]),
+            ]
 
-            if not os.path.isfile(downloaded_path):
+            info = None
+            downloaded_path = None
+            last_err = None
+            for idx, (fmt, clients) in enumerate(attempts):
+                if idx > 0:
+                    self.log("Retrying with fallback mobile player client...")
+                try:
+                    opts = self._build_ydl_opts(stage_dir, fmt, clients)
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                        downloaded_path = ydl.prepare_filename(info)
+                    last_err = None
+                    break
+                except Cancelled:
+                    raise
+                except Exception as attempt_err:
+                    last_err = attempt_err
+                    if "Requested format is not available" not in str(attempt_err):
+                        raise
+
+            if last_err is not None:
+                raise last_err
+
+            if not downloaded_path or not os.path.isfile(downloaded_path):
                 staged = [os.path.join(stage_dir, x) for x in os.listdir(stage_dir) if os.path.isfile(os.path.join(stage_dir, x))]
                 if not staged:
                     raise FileNotFoundError("Downloaded file not found in staging folder")
